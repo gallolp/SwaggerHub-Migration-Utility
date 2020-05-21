@@ -5,6 +5,7 @@ Created on Mar 19, 2019
 '''
 import requests
 import json
+import math
 import helper_functions
 
 
@@ -14,6 +15,7 @@ with open('config.json', 'r') as file:
 export_org_api_key= config['EXPORTORG']['API_KEY']
 export_org_registry_basepath = config['EXPORTORG']['REGISTRY_API_BASEPATH']
 export_org_name = config['EXPORTORG']['ORG']
+export_org_limit = config['EXPORTORG']['LIMIT']
 
 import_org_api_key= config['IMPORTORG']['API_KEY']
 import_org_registry_basepath = config['IMPORTORG']['REGISTRY_API_BASEPATH']
@@ -28,29 +30,52 @@ def main():
     #URL to pull/push API Specs
     export_org_registry_api = export_org_registry_basepath +"apis/"
     import_org_registry_api = import_org_registry_basepath + "apis/"
-        
-    #Pull specs in the outgoing org
-    org_specs_call = requests.get(export_org_registry_api + export_org_name, headers= {'Authorization': export_org_api_key})
+    
+    #Get number of API Specs pages
+    org_specs_call = requests.get(export_org_registry_api + export_org_name, headers= {'Authorization': export_org_api_key}, params= {'limit': 1, 'page': 0})
     org_apis_json = org_specs_call.json()
-    
+
     if len(org_apis_json['apis']) == 0:
-        raise RuntimeError("No APIs Found in Import Org")
+        raise RuntimeError("No APIs Found to export")
+
+    org_apis_num_pages = math.floor(org_apis_json["totalCount"] / export_org_limit)
+
+    #Pull specs in the outgoing org
+    org_apis_page = 0
+    while org_apis_page <= org_apis_num_pages:
+        org_specs_call = requests.get(export_org_registry_api + export_org_name, headers= {'Authorization': export_org_api_key}, params= {'limit': export_org_limit, 'page': org_apis_page})
+        org_apis_json = org_specs_call.json()
     
-    print("Migrating " + str(org_apis_json["totalCount"]) + " OAS Specs from " + export_org_registry_api + export_org_name + " to " + import_org_registry_api + import_org_name)
+        print("Migrating Page " + str(org_apis_page + 1) + " of " + str(org_apis_num_pages + 1) + " with " + str(len(org_apis_json['apis'])) + " OAS Specs (Total: " + str(org_apis_json["totalCount"]) + ")"
+            + " from " + export_org_registry_api + export_org_name + " to " + import_org_registry_api + import_org_name)
     
-    parse_org(org_apis_json, export_org_registry_api, import_org_registry_api)
+        parse_org(org_apis_json, export_org_registry_api, import_org_registry_api)
+        org_apis_page += 1
     
     
     export_org_domains_url = export_org_registry_basepath + "domains/"
     import_org_domains_url = import_org_registry_basepath + "domains/"
-    
-    export_org_domains_call = requests.get(export_org_domains_url + export_org_name, headers= {'Authorization': export_org_api_key})
-    
+
+    #Get number of Domains pages
+    export_org_domains_call = requests.get(export_org_domains_url + export_org_name, headers= {'Authorization': export_org_api_key}, params= {'limit': 1, 'page': 0})
     export_org_domains_json = export_org_domains_call.json()
+
+    if len(export_org_domains_json['apis']) == 0:
+        print("No Domains Found to export")
+
+    export_org_domains_num_pages = math.floor(export_org_domains_json["totalCount"] / export_org_limit)
+
+    #Pull domains in the outgoing org
+    export_org_domains_page = 0
+    while export_org_domains_page <= export_org_domains_num_pages:
+        export_org_domains_call = requests.get(export_org_domains_url + export_org_name, headers= {'Authorization': export_org_api_key}, params= {'limit': export_org_limit, 'page': export_org_domains_page})
+        export_org_domains_json = export_org_domains_call.json()
     
-    print("Migrating " + str(export_org_domains_json["totalCount"]) + " Domains from " + export_org_registry_api + export_org_name + " to " + import_org_registry_api + import_org_name +"\n\n")
+        print("Migrating Page " + str(export_org_domains_page + 1) + " of " + str(export_org_domains_num_pages + 1) + " with " + str(len(export_org_domains_json['apis'])) + " Domains (Total: " + str(export_org_domains_json["totalCount"]) + ")"
+            + " from " + export_org_registry_api + export_org_name + " to " + import_org_registry_api + import_org_name)
     
-    parse_org(export_org_domains_json, export_org_domains_url, import_org_domains_url)
+        parse_org(export_org_domains_json, export_org_domains_url, import_org_domains_url)
+        export_org_domains_page += 1
 
 
 def parse_org(org_json, export_url, import_url):
